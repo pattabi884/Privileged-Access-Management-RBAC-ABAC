@@ -4,9 +4,9 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  //golbal prefix 
+
   app.setGlobalPrefix('api');
-  //validation pipe
+
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -15,12 +15,20 @@ async function bootstrap() {
     }),
   );
 
-// cors
-app.enableCors();
+  app.enableCors({
+    origin: [
+      'http://localhost:3001',
+      'http://localhost:3000',
+      'https://rbac-audit-log-system-mock-hr.vercel.app',
+      /\.vercel\.app$/,
+    ],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true,
+  });
 
-const port = process.env.PORT || 3010;
-await app.listen(port);
-console.log(`RBAC sevice running on http://localhost:${port}/api`);
-
+  const port = process.env.PORT || 3010;
+  await app.listen(port);
+  console.log(`RBAC service running on http://localhost:${port}/api`);
 }
 bootstrap();
