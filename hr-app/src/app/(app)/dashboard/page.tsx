@@ -65,10 +65,10 @@ export default function DashboardPage() {
             <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-2">Your Access Level</p>
             <div className="flex items-center gap-2 flex-wrap">
               {roles.map((r: any) => (
-                <span key={r._id} className="px-2.5 py-1 bg-blue-50 text-blue-700 text-xs font-medium rounded-lg">
-                  {r.roleId?.name || "Unknown"}
-                </span>
-              ))}
+  <span key={r._id} className="px-2.5 py-1 bg-blue-50 text-blue-700 text-xs font-medium rounded-lg">
+    {r.name || r.roleId?.name || "Unknown"}
+  </span>
+))}
             </div>
           </div>
           <div className="text-right">

@@ -50,7 +50,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     </div>
   );
 
-  const primaryRole = roles[0]?.roleId?.name || "Employee";
+ const primaryRole = roles[0]?.name || roles[0]?.roleId?.name || "Employee";
 
   return (
     <div className="flex h-screen bg-slate-50">
