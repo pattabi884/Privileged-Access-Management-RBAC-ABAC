@@ -38,20 +38,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   setUser(u);
   try {
-    console.log('fetching permissions for:', u.userId);
-    const [perms, userRoles] = await Promise.all([
-      rbacApi.myPermissions(u.userId),
-      rbacApi.myRoles(u.userId),
-    ]);
+    const perms = await rbacApi.myPermissions(u.userId);
     console.log('perms:', perms);
-    console.log('roles:', userRoles);
     setPermissions(perms);
+  } catch (err) {
+    console.error('Permissions fetch error:', err);
+  }
+
+  try {
+    const userRoles = await rbacApi.myRoles(u.userId);
+    console.log('roles:', userRoles);
     setRoles(userRoles);
   } catch (err) {
-    console.error('Auth refresh error:', err);
-  } finally {
-    setLoading(false);
+    console.error('Roles fetch error — non critical:', err);
   }
+
+  setLoading(false);
 }
   useEffect(() => { refresh(); }, []);
 
