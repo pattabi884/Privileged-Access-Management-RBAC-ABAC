@@ -16,8 +16,9 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const res = await rbacApi.login(email, password);
-      setAuth(res.access_token, { userId: res.userId, email: res.email, name: res.name });
-      router.push("/dashboard");
+     setAuth(res.access_token, { userId: res.userId, email: res.email, name: res.name });
+// Full reload ensures cookies are readable before auth-context runs
+window.location.href = "/dashboard";
     } catch (err: any) {
       toast.error(err.message || "Login failed");
     } finally {
