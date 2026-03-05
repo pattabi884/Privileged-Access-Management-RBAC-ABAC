@@ -47,10 +47,12 @@ export class UsersService{
     async findByEmail(email: string): Promise<UserDocument | null>{
         return this.userModel.findOne({ email });
     }
-    //$set only updates the fields provided
+    //$set only updates the fields provided — fields not included are untouched.
+    // department is now included so admins can assign users to teams
+    // without requiring a fresh registration.
     async update(
         id: string,
-        data: Partial<{ name: string; email: string; isActive: boolean }>,
+        data: Partial<{ name: string; email: string; isActive: boolean; department: string }>,
     ): Promise<UserDocument> {
         const user = await this.userModel
         .findByIdAndUpdate(
@@ -65,29 +67,22 @@ export class UsersService{
         }
         return user;
     }
-    async updateLastLogin(id: string): Promise<void> {
-    await this.userModel.findByIdAndUpdate(id, {
-      $set: { lastLoginAt: new Date() },
-    });
-}
-async deactivate(id: string): Promise<UserDocument> {
-    const user = await this.userModel
-      .findByIdAndUpdate(
-        id,
-        { $set: { isActive: false } },
-        { returnDocument: 'after' },
-      )
-      .select('-passwordHash');
 
-    if (!user) {
-      throw new NotFoundException(`User ${id} not found`);
+    // Soft delete — sets isActive: false rather than removing the document.
+    // The JWT strategy will reject deactivated users on their next request.
+    // We keep the record for audit trail purposes.
+    async deactivate(id: string): Promise<UserDocument> {
+        const user = await this.userModel
+          .findByIdAndUpdate(
+            id,
+            { $set: { isActive: false } },
+            { returnDocument: 'after' },
+          )
+          .select('-passwordHash');
+
+        if (!user) {
+          throw new NotFoundException(`User ${id} not found`);
+        }
+        return user;
     }
-    return user;
-  }
-
-    async promoteUser(id: string): Promise<UserDocument> {
-    const user = await this.findOne(id);
-    // Add promotion logic here as your business needs grow
-    return user;
-  }
 }

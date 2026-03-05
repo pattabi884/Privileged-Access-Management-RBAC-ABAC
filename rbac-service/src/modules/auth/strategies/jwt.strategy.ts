@@ -21,21 +21,29 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt'){
             secretOrKey: configService.get<string>('JWT_SECRET') ?? '',
             });
     }
-    async validate(payload: {userId: string, email: string }){
-        //look up the user id
-        const user = await this.userModel.findById(payload.userId);
-        if (!user){
-            throw new UnauthorizedException('user no longer exists');
-        }
-        if(!user.isActive){
-            throw new UnauthorizedException('user account is deactivated')
-        }
-        return{
-            userId: payload.userId,
-            email: payload.email,
-            name: user.name,
-            isActive: user.isActive
-        };
+    async validate(payload: {
+        userId: string;
+        email: string;
+        loginTime: Date;
+        department: string | null;
+        mfaVerified: boolean;
+    }){
+            const user = await this.userModel.findById(payload.userId);
+            if(!user){
+                throw new UnauthorizedException('User not found');
+            }
+            if(!user.isActive){
+                throw new UnauthorizedException('User is inactive');
+            }
+return {
+    userId: payload.userId,
+    email: payload.email,
+    name: user.name,
+    department: payload.department ?? user.department ?? null,
+    mfaVerified: payload.mfaVerified ?? false,
+    loginTime: payload.loginTime,
+
+}
     }
 
 

@@ -1,3 +1,4 @@
+// src/modules/rbac/audit/audit.module.ts
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { BullModule } from '@nestjs/bullmq';
@@ -5,6 +6,7 @@ import { AuditLog, AuditLogSchema } from '@infrastructure/database/schemas/audit
 import { AuditService } from './audit.service';
 import { AuditProcessor } from './audit.processor';
 import { SuspiciousActivityService } from './suspicious-activity.service';
+import { AuditController } from './audit.controller';
 
 @Module({
   imports: [
@@ -13,6 +15,7 @@ import { SuspiciousActivityService } from './suspicious-activity.service';
     ]),
     BullModule.registerQueue({ name: 'audit' }),
   ],
+  controllers: [AuditController],
   providers: [
     AuditService,
     AuditProcessor,

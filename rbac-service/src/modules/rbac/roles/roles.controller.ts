@@ -29,9 +29,9 @@ export class RolesController {
     return this.rolesService.create(createRoleDto);
   }
 
-  // Temporarily public for bootstrap
-  @Public()
-  @Get()
+ 
+@Get()
+@RequirePermissions('roles:read')
   findAll() {
     return this.rolesService.findAll();
   }

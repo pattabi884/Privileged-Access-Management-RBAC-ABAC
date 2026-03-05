@@ -9,10 +9,10 @@ import { User, UserSchema } from '@infrastructure/database/schemas/user.schema';
 import { Mongoose } from 'mongoose';
 import { AuthController } from './auth.controller';
 import { UserRolesModule } from '../rbac/user-roles/user-roles.module';
+import { ContextEvaluatorService } from '../rbac/context/context-evaluator.service';
 @Module({
     imports:[
-        //Config module lets us read from .env files 
-          UserRolesModule,
+        UserRolesModule,
         ConfigModule,
         PassportModule.register({ defaultStrategy: 'jwt'}),
         JwtModule.registerAsync({
@@ -21,7 +21,6 @@ import { UserRolesModule } from '../rbac/user-roles/user-roles.module';
             useFactory: (config: ConfigService) => ({
                 secret: config.get<string>('JWT_SECRET'),
                 signOptions:{
-                    //how long until toekn expires
                     expiresIn: config.get<string>('JWT_EXPIRES_IN', '1h') as any
                 },
             }),
@@ -37,6 +36,7 @@ import { UserRolesModule } from '../rbac/user-roles/user-roles.module';
         //the guard that protects the routes 
         JwtAuthGuard,
         JwtStrategy,
+        ContextEvaluatorService,
     ],
      exports: [JwtAuthGuard, JwtModule, PassportModule],
 })

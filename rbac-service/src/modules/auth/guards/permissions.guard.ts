@@ -1,4 +1,3 @@
-// src/modules/auth/guards/permissions.guard.ts
 import { 
   Injectable, 
   CanActivate, 
@@ -12,6 +11,7 @@ import { ContextEvaluatorService } from 'src/modules/rbac/context/context-evalua
 import { PermissionContext } from 'src/modules/rbac/context/permission-context.interface';
 import { UserRolesService } from 'src/modules/rbac/user-roles/user-roles.service';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
+import { calculateSessionAge, getClientIp } from '../../../common/utils/auth.utils';
 
 
 @Injectable()
@@ -141,11 +141,11 @@ export class PermissionsGuard implements CanActivate {
       resourceType,
       resourceDepartment: request.body?.department,
       resourceOwnerId: request.body?.ownerId,
-      ipAddress: this.getClientIP(request),
+      ipAddress: getClientIp(request),
       userAgent: request.headers['user-agent'] || 'unknown',
       timestamp: new Date(),
       hasMFA: user.mfaVerified || false,
-      sessionAge: this.calculateSessionAge(user.loginTime),
+      sessionAge: calculateSessionAge(user.loginTime),
       deviceTrusted: this.isDeviceTrusted(request),
     };
   }
@@ -154,23 +154,6 @@ export class PermissionsGuard implements CanActivate {
     if (!path) return 'unknown';
     const match = path.match(/\/api\/([^\/]+)/);
     return match ? match[1] : 'unknown';
-  }
-
-  private getClientIP(request: any): string {
-    return (
-      request.headers['x-forwarded-for']?.split(',')[0] ||
-      request.headers['x-real-ip'] ||
-      request.connection.remoteAddress ||
-      request.socket.remoteAddress ||
-      'unknown'
-    );
-  }
-
-  private calculateSessionAge(loginTime: Date): number {
-    if (!loginTime) return 9999;
-    const now = new Date();
-    const diffMs = now.getTime() - new Date(loginTime).getTime();
-    return Math.floor(diffMs / 1000 / 60);
   }
 
   private isDeviceTrusted(request: any): boolean {

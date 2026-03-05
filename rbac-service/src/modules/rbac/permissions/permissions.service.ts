@@ -1,24 +1,3 @@
-// src/modules/rbac/permissions/permissions.service.ts
-//
-// ─── WHY THIS FILE CHANGED ──────────────────────────────────────────────────
-//
-// 'bonus:approve' was missing from seedPermissions().
-//
-// The Permission collection is a REGISTRY — it documents every action
-// that exists in the system. Even though PermissionsGuard works with plain
-// strings on Role.permissions[], having every permission registered here:
-//
-//   1. Makes the system self-documenting — you can call GET /permissions
-//      and see every permission in the system without reading the code
-//
-//   2. Allows validatePermissions() to catch typos — if someone tries to add
-//      'bonus:aprove' (typo) to a role, validation fails with a clear error
-//      rather than silently creating a broken permission string
-//
-//   3. Allows the frontend admin UI to list available permissions when
-//      building new roles, without hardcoding them in the UI
-//
-// ─────────────────────────────────────────────────────────────────────────────
 
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
@@ -93,14 +72,8 @@ export class PermissionsService {
     return found === names.length;
   }
 
-  // ─── SEED PERMISSIONS ───────────────────────────────────────────────────────
-  //
-  // Uses upsert ($setOnInsert) so running this multiple times is safe —
-  // it only inserts if the permission name doesn't already exist.
-  // Existing permissions are never overwritten.
-  //
   // HOW TO RUN: POST /permissions/seed (requires roles:create permission)
-  //
+  
   async seedPermissions(): Promise<void> {
     const defaultPermissions = [
       // Users
@@ -115,36 +88,20 @@ export class PermissionsService {
       { name: 'roles:update',    resource: 'roles',     action: 'update',  description: 'Update roles' },
       { name: 'roles:delete',    resource: 'roles',     action: 'delete',  description: 'Delete roles' },
       { name: 'roles:assign',    resource: 'roles',     action: 'assign',  description: 'Assign roles to users' },
+  { name: 'access:request',  resource: 'access',    action: 'request', description: 'Submit a request for privileged resource access' },
+      { name: 'access:approve',  resource: 'access',    action: 'approve', description: 'Approve or reject access requests' },
+      { name: 'access:revoke',   resource: 'access',    action: 'revoke',  description: 'Revoke previously granted access' },
+      { name: 'access:read',     resource: 'access',    action: 'read',    description: 'View all access requests and their status' },
 
-      // Reports
+      // ── PAM: Audit ───────────────────────────────────────────────────────────
+    
+      { name: 'audit:read',      resource: 'audit',     action: 'read',    description: 'Read raw audit logs and suspicious activity reports' },
+
+   
       { name: 'reports:read',    resource: 'reports',   action: 'read',    description: 'Read reports' },
-      { name: 'reports:export',  resource: 'reports',   action: 'export',  description: 'Export reports' },
-
-      // Invoices
-      { name: 'invoices:approve',resource: 'invoices',  action: 'approve', description: 'Approve invoices' },
-
-      // Employees (HR service domain)
-      { name: 'employees:create',resource: 'employees', action: 'create',  description: 'Create new employee records' },
-      { name: 'employees:read',  resource: 'employees', action: 'read',    description: 'View employee directory' },
-      { name: 'employees:update',resource: 'employees', action: 'update',  description: 'Update employee information' },
-      { name: 'employees:delete',resource: 'employees', action: 'delete',  description: 'Deactivate employees' },
-
-      // Leave
-      { name: 'leave:create',    resource: 'leave',     action: 'create',  description: 'Submit leave requests' },
-      { name: 'leave:read',      resource: 'leave',     action: 'read',    description: 'View all leave requests' },
-      { name: 'leave:approve',   resource: 'leave',     action: 'approve', description: 'Approve or reject leave requests' },
-
-      // Payroll
-      { name: 'payroll:read',    resource: 'payroll',   action: 'read',    description: 'View payroll information' },
-
-      // ── NEW ─────────────────────────────────────────────────────────────────
-      //
-      // bonus:approve was missing — this is the permission the e2e tests verify.
-      // Without this entry the Permission collection had no record of this
-      // action existing, which made validatePermissions() return false if
-      // anyone tried to add it to a role through the API.
-      //
-      { name: 'bonus:approve',   resource: 'bonus',     action: 'approve', description: 'Approve employee bonus payouts' },
+      { name: 'reports:export',  resource: 'reports',   action: 'export',  description: 'Export reports — restricted to trusted IPs' },
+      { name: 'invoices:approve',resource: 'invoices',  action: 'approve', description: 'Approve invoices — requires MFA, weekdays only, fresh session' },
+      { name: 'bonus:approve',   resource: 'bonus',     action: 'approve', description: 'Approve bonus payouts' },
     ];
 
     for (const perm of defaultPermissions) {

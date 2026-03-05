@@ -63,10 +63,10 @@ export class UserRolesService {
 
 async getUserRoles(userId: string): Promise<Role[]> {
   const userRoles = await this.userRoleModel
-    .find({ userId: new Types.ObjectId(userId) }) // explicit cast, no auto-cast ambiguity
+    .find({ userId: userId.toString() })  // ← plain string match
     .populate('roleId')
     .exec();
-  return userRoles.map((ur) => ur.roleId as any);
+  return userRoles.map((ur) => ur.roleId as any).filter(Boolean);
 }
 
   async getUserPermissions(userId: string): Promise<string[]> {

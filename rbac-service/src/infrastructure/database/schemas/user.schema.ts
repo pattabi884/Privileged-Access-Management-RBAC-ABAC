@@ -18,5 +18,15 @@ export class User {
 
     @Prop({ type: Date })
     lastLoginAt?: Date;
+
+    @Prop({ type: String })
+    department?: string;
+  
+    @Prop({ default: false })
+    mfaVerified: boolean;
+  
+    @Prop({ type: String, select: false})
+    mfaSecret?: string;
+
 }
 export const UserSchema = SchemaFactory.createForClass(User)

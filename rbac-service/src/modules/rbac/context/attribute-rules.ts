@@ -16,6 +16,25 @@ export interface AttributeRule {
 
 // Define rules for specific permissions
 export const PERMISSION_RULES: Record<string, AttributeRule[]> = {
+  'access:approve': [
+    {
+      condition: RuleCondition.MFA_REQUIRED,
+      errorMessage: 'MFA verification required to approve acess requests',
+    },
+    {
+      condition: RuleCondition.WEEKDAY_ONLY,
+      errorMessage: 'Session expired, Please re-login to approve requests'
+    },
+  ],
+  'access:revoke': [
+    {
+      condition: RuleCondition.MFA_REQUIRED,
+      errorMessage: 'MFA verification required to revoke acess requests',
+    
+    },
+  ],
+
+
   'users:delete': [
     {
       condition: RuleCondition.SAME_DEPARTMENT,
