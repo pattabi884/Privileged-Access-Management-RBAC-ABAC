@@ -11,7 +11,6 @@
 [![Railway](https://img.shields.io/badge/Railway-0B0D0E?style=for-the-badge&logo=railway&logoColor=white)](https://railway.app)
 [![Vercel](https://img.shields.io/badge/Vercel-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://vercel.com)
 
-[**Live API**](https://privileged-access-management-rbac-abac-production.up.railway.app/api) · [**Frontend**](https://sentry-ui.vercel.app) · [**See Code**](https://github.com/pattabi884/Privileged-Access-Management-RBAC-ABAC)
 
 </div>
 
@@ -37,8 +36,7 @@ Every permission check runs through a rules engine evaluating business-hour cons
 
 | Service | URL |
 |---------|-----|
-| REST API | https://privileged-access-management-rbac-abac-production.up.railway.app/api |
-| Sentry UI | https://sentry-ui.vercel.app |
+| Live Website | https://privileged-access-management-rbac-a-delta.vercel.app/d |
 
 ### Demo Accounts
 
