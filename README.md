@@ -36,7 +36,7 @@ Every permission check runs through a rules engine evaluating business-hour cons
 
 | Service | URL |
 |---------|-----|
-| Live Website | https://privileged-access-management-rbac-a-delta.vercel.app/d |
+| Live Website | https://privileged-access-management-rbac-a-delta.vercel.app/login |
 
 ### Demo Accounts
 
