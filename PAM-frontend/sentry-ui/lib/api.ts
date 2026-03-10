@@ -32,9 +32,6 @@ async function apiFetch<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
-  // Read token from localStorage — this only runs in the browser.
-  // Server components can't call this (they have no localStorage),
-  // which is why all our data-fetching components will be client components.
   const token = typeof window !== 'undefined'
     ? localStorage.getItem('sentry_token')
     : null;
@@ -43,20 +40,15 @@ async function apiFetch<T>(
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      // Attach the token if we have one. This is the Bearer token pattern
-      // your JwtAuthGuard expects: "Authorization: Bearer <token>"
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
   });
 
-  // Parse the body regardless of status — NestJS error responses
-  // have a JSON body with { message, statusCode } that we want to surface.
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
     const message = data?.message ?? `Request failed with status ${response.status}`;
-    // Log to console so you can trace exactly which call failed
     console.warn(`[API ${response.status}] ${options?.method ?? 'GET'} ${path} —`, message);
     throw new ApiError(response.status, message, data);
   }
@@ -93,7 +85,7 @@ export const authApi = {
 
 // ── Access Request endpoints ──────────────────────────────────────────────────
 
-export type AccessRequestStatus = 'pending' | 'approved' | 'rejected' | 'revoked';
+export type AccessRequestStatus = 'pending' | 'approved' | 'rejected' | 'revoked' | 'expired';
 
 export interface AccessRequest {
   _id: string;
@@ -103,6 +95,10 @@ export interface AccessRequest {
   justification: string;
   requestedDuration: string;
   status: AccessRequestStatus;
+  // temporal grant fields — null/false until approved
+  expiresAt: string | null;
+  isPermanent: boolean;
+  autoExpired: boolean;
   reviewerId: string | null;
   reviewerEmail: string | null;
   reviewNote: string | null;
@@ -221,7 +217,43 @@ export interface AuditLog {
 }
 
 export const auditApi = {
-  getRecent:    ()             => apiFetch<AuditLog[]>('/audit/recent'),
-  getSuspicious: ()            => apiFetch<AuditLog[]>('/audit/suspicious'),
-  getUserLogs:  (userId: string) => apiFetch<AuditLog[]>(`/audit/user/${userId}`),
+  getRecent:     ()               => apiFetch<AuditLog[]>('/audit/recent'),
+  getSuspicious: ()               => apiFetch<AuditLog[]>('/audit/suspicious'),
+  getUserLogs:   (userId: string) => apiFetch<AuditLog[]>(`/audit/user/${userId}`),
+};
+
+// ── Grants endpoints ──────────────────────────────────────────────────────────
+
+export interface ActiveGrant {
+  resource: string;
+  requestId: string | null;
+  expiresAt: string | null;
+  isPermanent: boolean;
+  ttlSeconds: number | null;   // null = permanent, number = seconds remaining
+  grantedBy: string | null;
+  grantedAt: string | null;
+  justification: string | null;
+}
+
+export interface GrantCheckResult {
+  granted: boolean;
+  requestId: string | null;
+  resource: string;
+  expiresAt: string | null;
+  isPermanent: boolean;
+  ttlSeconds: number | null;
+  source: 'redis' | 'mongodb-fallback';
+}
+
+export const grantsApi = {
+  // My own active grants — any logged-in user
+  getMyActive: () => apiFetch<ActiveGrant[]>('/grants/active'),
+
+  // Any user's grants — requires access:read
+  getActiveForUser: (userId: string) =>
+    apiFetch<ActiveGrant[]>(`/grants/active/${userId}`),
+
+  // Boolean check — used by downstream services
+  check: (userId: string, resource: string) =>
+    apiFetch<GrantCheckResult>(`/grants/check?userId=${userId}&resource=${resource}`),
 };
