@@ -37,8 +37,7 @@ Every permission check runs through a rules engine evaluating business-hour cons
 
 | Service | URL |
 |---------|-----|
-| REST API | https://privileged-access-management-rbac-abac-production.up.railway.app/login |
-| Sentry UI | https://sentry-ui.vercel.app |
+| Live Website | https://privileged-access-management-rbac-a-delta.vercel.app/login |
 
 ### Demo Accounts
 
