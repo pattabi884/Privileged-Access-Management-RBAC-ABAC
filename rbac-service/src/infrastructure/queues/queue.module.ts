@@ -9,9 +9,8 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
         const redisUrl = config.get<string>('REDIS_URL');
-        
+
         if (redisUrl) {
-          // Parse rediss://default:PASSWORD@HOST:PORT
           const url = new URL(redisUrl);
           return {
             connection: {
@@ -23,19 +22,19 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
           };
         }
 
-        // Fallback for local development
-        return {
-          connection: {
-            host: 'localhost',
-            port: 6379,
-          },
-        };
+        return { connection: { host: 'localhost', port: 6379 } };
       },
     }),
 
-    BullModule.registerQueue({
-      name: 'audit',
-    }),
+    // Existing queue — audit processor consumes from this
+    BullModule.registerQueue({ name: 'audit' }),
+
+    // New queue — grant-expiry processor consumes from this.
+    // Jobs are pushed here by access-requests.service.ts approve()
+    // with a delay equal to the grant duration in milliseconds.
+    // BullMQ persists delayed jobs in Redis so a server restart
+    // doesn't lose pending expiry jobs.
+    BullModule.registerQueue({ name: 'grants' }),
   ],
   exports: [BullModule],
 })

@@ -1,7 +1,9 @@
-# compiled output
-
-/node_modules
+# compiled output — Railway builds to dist/, never commit this
+/dist
 /build
+
+# dependencies
+/node_modules
 
 # Logs
 logs
@@ -35,14 +37,14 @@ lerna-debug.log*
 !.vscode/launch.json
 !.vscode/extensions.json
 
-# dotenv environment variable files
+# dotenv — never commit secrets
 .env
 .env.development.local
 .env.test.local
 .env.production.local
 .env.local
 
-# temp directory
+# temp
 .temp
 .tmp
 
@@ -52,5 +54,5 @@ pids
 *.seed
 *.pid.lock
 
-# Diagnostic reports (https://nodejs.org/api/report.html)
-report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+# TypeScript build info
+*.tsbuildinfo

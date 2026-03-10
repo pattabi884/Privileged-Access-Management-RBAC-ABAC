@@ -3,17 +3,38 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
-import { accessRequestsApi, rolesApi, usersApi, auditApi, AccessRequest, User, Role, AuditLog, ApiError } from '@/lib/api';
+import {
+  accessRequestsApi, rolesApi, usersApi, auditApi, grantsApi,
+  AccessRequest, ActiveGrant, User, Role, AuditLog, ApiError,
+} from '@/lib/api';
 
-// ── Shared components ──────────────────────────────────────────────────────────
-
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge({ status, autoExpired }: { status: string; autoExpired?: boolean }) {
+  if (status === 'expired' && autoExpired) {
+    return (
+      <span className="badge" style={{
+        background: 'rgba(251,191,36,0.1)', color: '#fbbf24',
+        border: '1px solid rgba(251,191,36,0.2)',
+      }}>
+        ⏱ auto-expired
+      </span>
+    );
+  }
+  if (status === 'expired') {
+    return <span className="badge badge-rejected">expired</span>;
+  }
   return <span className={`badge badge-${status}`}>{status}</span>;
 }
 
 function Spinner() {
   return (
-    <div style={{ width: 16, height: 16, border: '2px solid var(--border)', borderTopColor: 'var(--accent)', borderRadius: '50%', animation: 'spin 0.6s linear infinite', display: 'inline-block' }} />
+    <div style={{
+      width: 16, height: 16,
+      border: '2px solid var(--border)',
+      borderTopColor: 'var(--accent)',
+      borderRadius: '50%',
+      animation: 'spin 0.6s linear infinite',
+      display: 'inline-block',
+    }} />
   );
 }
 
@@ -24,11 +45,12 @@ function Sidebar({ tab, setTab, user, logout }: any) {
   const canApprove   = permissions.includes('access:approve') || permissions.includes('*:*');
 
   const tabs = [
-    { id: 'my-requests', label: 'My Requests',    icon: '◈', show: true },
-    { id: 'new-request', label: 'New Request',     icon: '+', show: true },
-    { id: 'queue',       label: 'Approval Queue',  icon: '⊞', show: canApprove },
-    { id: 'users',       label: 'Users & Roles',   icon: '⊙', show: canViewUsers },
-    { id: 'audit',       label: 'Audit Log',        icon: '◎', show: canViewAudit },
+    { id: 'active-grants', label: 'Active Grants',  icon: '⚡', show: true },
+    { id: 'my-requests',   label: 'My Requests',    icon: '◈', show: true },
+    { id: 'new-request',   label: 'New Request',    icon: '+', show: true },
+    { id: 'queue',         label: 'Approval Queue', icon: '⊞', show: canApprove },
+    { id: 'users',         label: 'Users & Roles',  icon: '⊙', show: canViewUsers },
+    { id: 'audit',         label: 'Audit Log',      icon: '◎', show: canViewAudit },
   ].filter(t => t.show);
 
   return (
@@ -39,7 +61,6 @@ function Sidebar({ tab, setTab, user, logout }: any) {
       display: 'flex', flexDirection: 'column',
       height: '100vh', position: 'sticky', top: 0,
     }}>
-      {/* Logo */}
       <div style={{ padding: '20px 20px 16px', borderBottom: '1px solid var(--border-subtle)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{
@@ -55,7 +76,6 @@ function Sidebar({ tab, setTab, user, logout }: any) {
         </div>
       </div>
 
-      {/* Nav */}
       <nav style={{ flex: 1, padding: '12px 12px' }}>
         {tabs.map(t => (
           <button
@@ -67,8 +87,7 @@ function Sidebar({ tab, setTab, user, logout }: any) {
               background: tab === t.id ? 'var(--bg-hover)' : 'transparent',
               color: tab === t.id ? 'var(--text-primary)' : 'var(--text-secondary)',
               fontSize: 13, fontFamily: 'inherit', fontWeight: tab === t.id ? 500 : 400,
-              textAlign: 'left', marginBottom: 2,
-              transition: 'all 0.1s',
+              textAlign: 'left', marginBottom: 2, transition: 'all 0.1s',
               borderLeft: tab === t.id ? '2px solid var(--accent)' : '2px solid transparent',
             }}
           >
@@ -78,7 +97,6 @@ function Sidebar({ tab, setTab, user, logout }: any) {
         ))}
       </nav>
 
-      {/* User */}
       <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border-subtle)' }}>
         <div style={{ marginBottom: 8 }}>
           <p style={{ fontSize: 13, fontWeight: 500 }}>{user?.name}</p>
@@ -95,14 +113,128 @@ function Sidebar({ tab, setTab, user, logout }: any) {
   );
 }
 
+// ── Active Grants tab ─────────────────────────────────────────────────────────
+
+function ActiveGrantsTab() {
+  const [grants, setGrants]   = useState<ActiveGrant[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [tick, setTick]       = useState(0);
+
+  useEffect(() => {
+    grantsApi.getMyActive()
+      .then(setGrants)
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  // Tick every second for live countdown
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const fmtCountdown = (ttlSeconds: number | null, isPermanent: boolean) => {
+    if (isPermanent) return '∞';
+    if (ttlSeconds === null || ttlSeconds <= 0) return 'Expired';
+    const h = Math.floor(ttlSeconds / 3600);
+    const m = Math.floor((ttlSeconds % 3600) / 60);
+    const s = ttlSeconds % 60;
+    if (h > 0) return `${h}h ${m}m`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+  };
+
+  if (loading) return (
+    <div style={{ padding: 32, display: 'flex', gap: 12, alignItems: 'center', color: 'var(--text-secondary)' }}>
+      <Spinner /> Loading active grants...
+    </div>
+  );
+
+  return (
+    <div style={{ padding: 32 }}>
+      <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 6 }}>Active Grants</h2>
+      <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 24 }}>
+        Resources you currently have approved access to. Temporal grants auto-revoke when the timer hits zero.
+      </p>
+
+      {grants.length === 0 ? (
+        <div className="card" style={{ padding: 40, textAlign: 'center', color: 'var(--text-secondary)' }}>
+          <p style={{ fontSize: 13 }}>No active grants.</p>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
+            Try requesting <code style={{ fontFamily: 'JetBrains Mono' }}>demo-access</code> for <strong>2 minutes</strong> to see the temporal grant feature in action.
+          </p>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {grants.map(g => {
+            const liveTtl = g.isPermanent ? null
+              : g.ttlSeconds !== null ? Math.max(0, g.ttlSeconds - tick) : null;
+            const isExpiringSoon = !g.isPermanent && liveTtl !== null && liveTtl < 30;
+            const isExpired      = !g.isPermanent && liveTtl !== null && liveTtl <= 0;
+            const accentColor    = isExpired ? '#6b7280' : isExpiringSoon ? '#ef4444' : '#10b981';
+
+            return (
+              <div key={g.requestId ?? g.resource} className="card" style={{
+                padding: '16px 20px',
+                borderLeft: `3px solid ${accentColor}`,
+                opacity: isExpired ? 0.6 : 1,
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                      <span style={{
+                        width: 7, height: 7, borderRadius: '50%',
+                        background: accentColor, display: 'inline-block',
+                        animation: !isExpired ? 'pulse 2s ease-in-out infinite' : 'none',
+                      }} />
+                      <span style={{ fontFamily: 'JetBrains Mono', fontSize: 13, color: 'var(--accent)', fontWeight: 500 }}>
+                        {g.resource}
+                      </span>
+                      {isExpired
+                        ? <span className="badge" style={{ background: 'rgba(107,114,128,0.15)', color: '#6b7280', border: '1px solid rgba(107,114,128,0.2)' }}>expired</span>
+                        : <span className="badge" style={{ background: 'rgba(16,185,129,0.1)', color: '#10b981', border: '1px solid rgba(16,185,129,0.2)' }}>● active</span>
+                      }
+                    </div>
+                    {g.justification && (
+                      <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4, fontStyle: 'italic' }}>
+                        "{g.justification}"
+                      </p>
+                    )}
+                    <p style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'JetBrains Mono' }}>
+                      Granted by {g.grantedBy ?? '—'} · {g.grantedAt ? new Date(g.grantedAt).toLocaleString() : ''}
+                    </p>
+                  </div>
+
+                  <div style={{ textAlign: 'right' }}>
+                    <p style={{
+                      fontSize: 22, fontWeight: 700, fontFamily: 'JetBrains Mono',
+                      color: accentColor,
+                      animation: isExpiringSoon && !isExpired ? 'pulse 1s ease-in-out infinite' : 'none',
+                    }}>
+                      {fmtCountdown(liveTtl, g.isPermanent)}
+                    </p>
+                    {!g.isPermanent && g.expiresAt && (
+                      <p style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
+                        expires {new Date(g.expiresAt).toLocaleTimeString()}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── My Requests tab ───────────────────────────────────────────────────────────
 
 function MyRequestsTab() {
   const [requests, setRequests] = useState<AccessRequest[]>([]);
   const [loading, setLoading]   = useState(true);
 
-  // useEffect with [] runs once on mount — equivalent to componentDidMount.
-  // This is the standard pattern for "fetch data when page loads."
   useEffect(() => {
     accessRequestsApi.getMine()
       .then(setRequests)
@@ -110,7 +242,11 @@ function MyRequestsTab() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div style={{ padding: 32, display: 'flex', gap: 12, alignItems: 'center', color: 'var(--text-secondary)' }}><Spinner /> Loading your requests...</div>;
+  if (loading) return (
+    <div style={{ padding: 32, display: 'flex', gap: 12, alignItems: 'center', color: 'var(--text-secondary)' }}>
+      <Spinner /> Loading your requests...
+    </div>
+  );
 
   return (
     <div style={{ padding: 32 }}>
@@ -131,12 +267,22 @@ function MyRequestsTab() {
                     <span style={{ fontFamily: 'JetBrains Mono', fontSize: 13, color: 'var(--accent)', fontWeight: 500 }}>
                       {r.resource}
                     </span>
-                    <StatusBadge status={r.status} />
+                    <StatusBadge status={r.status} autoExpired={r.autoExpired} />
                   </div>
                   <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 4 }}>{r.justification}</p>
                   <p style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'JetBrains Mono' }}>
                     Duration: {r.requestedDuration} · {new Date(r.createdAt).toLocaleDateString()}
                   </p>
+                  {r.status === 'approved' && r.expiresAt && !r.isPermanent && (
+                    <p style={{ fontSize: 11, color: '#10b981', fontFamily: 'JetBrains Mono', marginTop: 4 }}>
+                      ⏱ expires {new Date(r.expiresAt).toLocaleTimeString()}
+                    </p>
+                  )}
+                  {r.status === 'approved' && r.isPermanent && (
+                    <p style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'JetBrains Mono', marginTop: 4 }}>
+                      ∞ permanent access
+                    </p>
+                  )}
                 </div>
               </div>
               {r.reviewNote && (
@@ -155,12 +301,12 @@ function MyRequestsTab() {
 // ── New Request tab ───────────────────────────────────────────────────────────
 
 function NewRequestTab() {
-  const [resource, setResource]   = useState('');
-  const [justification, setJust]  = useState('');
-  const [duration, setDuration]   = useState('');
-  const [loading, setLoading]     = useState(false);
-  const [success, setSuccess]     = useState(false);
-  const [error, setError]         = useState('');
+  const [resource, setResource] = useState('');
+  const [justification, setJust] = useState('');
+  const [duration, setDuration]  = useState('');
+  const [loading, setLoading]    = useState(false);
+  const [success, setSuccess]    = useState(false);
+  const [error, setError]        = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -176,7 +322,7 @@ function NewRequestTab() {
     }
   };
 
-  const presets = ['production-database', 'payment-gateway-admin', 'staging-api-keys', 'analytics-export', 'infra-ssh-access'];
+  const presets = ['demo-access', 'production-database', 'payment-gateway-admin', 'staging-api-keys', 'analytics-export'];
 
   return (
     <div style={{ padding: 32, maxWidth: 560 }}>
@@ -187,7 +333,7 @@ function NewRequestTab() {
 
       {success && (
         <div style={{ padding: '12px 16px', borderRadius: 6, background: 'var(--green-dim)', border: '1px solid rgba(16,185,129,0.2)', color: 'var(--green)', fontSize: 13, marginBottom: 20 }}>
-          ✓ Request submitted successfully. Check "My Requests" for status updates.
+          ✓ Request submitted. Check "My Requests" for updates, or "Active Grants" once approved.
         </div>
       )}
 
@@ -202,8 +348,14 @@ function NewRequestTab() {
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
               {presets.map(p => (
                 <button key={p} type="button" onClick={() => setResource(p)}
-                  style={{ padding: '3px 10px', borderRadius: 4, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 11, cursor: 'pointer', fontFamily: 'JetBrains Mono' }}>
-                  {p}
+                  style={{
+                    padding: '3px 10px', borderRadius: 4,
+                    border: `1px solid ${p === 'demo-access' ? 'var(--accent)' : 'var(--border)'}`,
+                    background: p === 'demo-access' ? 'var(--accent-dim)' : 'transparent',
+                    color: p === 'demo-access' ? 'var(--accent)' : 'var(--text-secondary)',
+                    fontSize: 11, cursor: 'pointer', fontFamily: 'JetBrains Mono',
+                  }}>
+                  {p === 'demo-access' ? '⏱ demo-access' : p}
                 </button>
               ))}
             </div>
@@ -222,8 +374,8 @@ function NewRequestTab() {
             <label style={{ display: 'block', fontSize: 12, color: 'var(--text-secondary)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Duration
             </label>
-            <div style={{ display: 'flex', gap: 6 }}>
-              {['2 hours', '1 day', '1 week', 'permanent'].map(d => (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {['2 minutes', '2 hours', '1 day', '1 week', 'permanent'].map(d => (
                 <button key={d} type="button" onClick={() => setDuration(d)}
                   style={{
                     padding: '6px 14px', borderRadius: 5, border: '1px solid',
@@ -236,11 +388,17 @@ function NewRequestTab() {
                 </button>
               ))}
             </div>
-            {!duration && <input className="input" style={{ marginTop: 8 }} value={duration}
-              onChange={e => setDuration(e.target.value)} placeholder="Or type custom duration" />}
+            {!duration && (
+              <input className="input" style={{ marginTop: 8 }} value={duration}
+                onChange={e => setDuration(e.target.value)} placeholder="Or type custom duration" />
+            )}
           </div>
 
-          {error && <div style={{ padding: '10px 14px', borderRadius: 6, background: 'var(--red-dim)', color: 'var(--red)', fontSize: 13 }}>{error}</div>}
+          {error && (
+            <div style={{ padding: '10px 14px', borderRadius: 6, background: 'var(--red-dim)', color: 'var(--red)', fontSize: 13 }}>
+              {error}
+            </div>
+          )}
 
           <button className="btn btn-primary" type="submit" disabled={loading || !duration}>
             {loading ? 'Submitting...' : 'Submit Request'}
@@ -258,7 +416,7 @@ function ApprovalQueueTab({ currentUserId }: { currentUserId: string }) {
   const [loading, setLoading]   = useState(true);
   const [filter, setFilter]     = useState<'pending' | 'approved' | 'rejected' | 'revoked'>('pending');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [note, setNote] = useState<Record<string, string>>({});
+  const [note, setNote]  = useState<Record<string, string>>({});
   const [error, setError] = useState('');
 
   const fetchRequests = useCallback(() => {
@@ -269,8 +427,6 @@ function ApprovalQueueTab({ currentUserId }: { currentUserId: string }) {
       .finally(() => setLoading(false));
   }, [filter]);
 
-  // Re-fetch when filter changes — filter is in the dependency array
-  // so useEffect runs again whenever it changes.
   useEffect(() => { fetchRequests(); }, [fetchRequests]);
 
   const act = async (id: string, action: 'approve' | 'reject' | 'revoke') => {
@@ -282,9 +438,6 @@ function ApprovalQueueTab({ currentUserId }: { currentUserId: string }) {
       if (action === 'revoke')  await accessRequestsApi.revoke(id, note[id] ?? '');
       fetchRequests();
     } catch (err) {
-      // This is where you'll see ABAC errors:
-      // "Permission denied: Access approvals are only permitted Monday through Friday"
-      // "Permission denied: MFA verification required to approve access requests"
       setError(err instanceof ApiError ? err.message : 'Action failed');
     } finally {
       setActionLoading(null);
@@ -304,8 +457,7 @@ function ApprovalQueueTab({ currentUserId }: { currentUserId: string }) {
         </div>
       )}
 
-      {/* Filter tabs */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: '1px solid var(--border)', paddingBottom: 0 }}>
+      <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: '1px solid var(--border)' }}>
         {(['pending', 'approved', 'rejected', 'revoked'] as const).map(f => (
           <button key={f} onClick={() => setFilter(f)}
             style={{
@@ -313,8 +465,7 @@ function ApprovalQueueTab({ currentUserId }: { currentUserId: string }) {
               background: 'transparent', fontSize: 13,
               color: filter === f ? 'var(--accent)' : 'var(--text-secondary)',
               borderBottom: `2px solid ${filter === f ? 'var(--accent)' : 'transparent'}`,
-              marginBottom: -1, transition: 'all 0.1s',
-              textTransform: 'capitalize',
+              marginBottom: -1, transition: 'all 0.1s', textTransform: 'capitalize',
             }}>
             {f}
           </button>
@@ -335,7 +486,7 @@ function ApprovalQueueTab({ currentUserId }: { currentUserId: string }) {
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
                     <span style={{ fontFamily: 'JetBrains Mono', fontSize: 13, color: 'var(--accent)', fontWeight: 500 }}>{r.resource}</span>
-                    <StatusBadge status={r.status} />
+                    <StatusBadge status={r.status} autoExpired={r.autoExpired} />
                     {r.requesterId === currentUserId && (
                       <span className="badge" style={{ background: 'var(--blue-dim)', color: 'var(--blue)', border: '1px solid rgba(59,130,246,0.2)' }}>yours</span>
                     )}
@@ -344,6 +495,11 @@ function ApprovalQueueTab({ currentUserId }: { currentUserId: string }) {
                   <p style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'JetBrains Mono' }}>
                     By {r.requesterEmail} · {r.requestedDuration} · {new Date(r.createdAt).toLocaleString()}
                   </p>
+                  {r.expiresAt && r.status === 'approved' && !r.isPermanent && (
+                    <p style={{ fontSize: 11, color: '#10b981', fontFamily: 'JetBrains Mono', marginTop: 4 }}>
+                      ⏱ expires {new Date(r.expiresAt).toLocaleTimeString()}
+                    </p>
+                  )}
                   {r.reviewNote && (
                     <div style={{ marginTop: 8, padding: '6px 10px', borderRadius: 4, background: 'var(--bg-elevated)', fontSize: 12, color: 'var(--text-secondary)', borderLeft: '2px solid var(--border)' }}>
                       <strong style={{ color: 'var(--text-primary)' }}>Note:</strong> {r.reviewNote} · by {r.reviewerEmail}
@@ -351,11 +507,10 @@ function ApprovalQueueTab({ currentUserId }: { currentUserId: string }) {
                   )}
                 </div>
 
-                {/* Action area — only show for pending (approve/reject) or approved (revoke) */}
                 {(r.status === 'pending' || r.status === 'approved') && r.requesterId !== currentUserId && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 200 }}>
                     <input className="input" style={{ fontSize: 12 }}
-                      placeholder='Review note (required)'
+                      placeholder="Review note (required)"
                       value={note[r._id] ?? ''}
                       onChange={e => setNote(n => ({ ...n, [r._id]: e.target.value }))}
                     />
@@ -397,64 +552,66 @@ function ApprovalQueueTab({ currentUserId }: { currentUserId: string }) {
 
 function UsersTab() {
   const { user: currentUser, permissions } = useAuth();
-  const [users, setUsers]   = useState<User[]>([]);
-  const [roles, setRoles]   = useState<Role[]>([]);
+  const [users, setUsers]     = useState<User[]>([]);
+  const [roles, setRoles]     = useState<Role[]>([]);
   const [userRoles, setUserRoles] = useState<Record<string, Role[]>>({});
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast]     = useState<string | null>(null);
 
-  const canManageRoles = permissions.includes('roles:read') || permissions.includes('*:*');
+  const canManageRoles = permissions.includes('roles:assign') || permissions.includes('*:*');
 
   useEffect(() => {
-    const fetches: [Promise<any>, Promise<any>] = [
+    Promise.all([
       usersApi.getAll().catch(() => []),
-      canManageRoles ? rolesApi.getAll().catch(() => []) : Promise.resolve([]),
-    ];
-    Promise.all(fetches)
+      rolesApi.getAll().catch(() => []),
+    ])
       .then(([u, r]) => { setUsers(u); setRoles(r); })
       .finally(() => setLoading(false));
-  }, [canManageRoles]);
+  }, []);
 
   const loadUserRoles = async (userId: string) => {
     if (userRoles[userId]) { setExpanded(expanded === userId ? null : userId); return; }
     try {
-      const roles = await rolesApi.getUserRoles(userId);
-      setUserRoles(r => ({ ...r, [userId]: roles }));
+      const r = await rolesApi.getUserRoles(userId);
+      setUserRoles(prev => ({ ...prev, [userId]: r }));
       setExpanded(userId);
-    } catch { /* silently ignore — user may not have permission */ }
+    } catch { }
+  };
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
   };
 
   const assignRole = async (userId: string, roleId: string) => {
-    if (userId === currentUser?.userId) {
-      setToast('You cannot assign roles to yourself.');
-      setTimeout(() => setToast(null), 3000);
-      return;
-    }
+    if (userId === currentUser?.userId) { showToast('You cannot assign roles to yourself.'); return; }
     try {
       await rolesApi.assignRole(userId, roleId, currentUser?.email ?? 'admin');
       const updated = await rolesApi.getUserRoles(userId);
-      setUserRoles(r => ({ ...r, [userId]: updated }));
-      setToast('Role assigned successfully.');
+      setUserRoles(prev => ({ ...prev, [userId]: updated }));
+      showToast('Role assigned successfully.');
     } catch (e: any) {
-      setToast(e?.message ?? 'Failed to assign role.');
+      showToast(e?.message ?? 'Failed to assign role.');
     }
-    setTimeout(() => setToast(null), 3000);
   };
 
   const removeRole = async (userId: string, roleId: string) => {
     try {
       await rolesApi.removeRole(userId, roleId);
       const updated = await rolesApi.getUserRoles(userId);
-      setUserRoles(r => ({ ...r, [userId]: updated }));
-      setToast('Role removed.');
+      setUserRoles(prev => ({ ...prev, [userId]: updated }));
+      showToast('Role removed.');
     } catch (e: any) {
-      setToast(e?.message ?? 'Failed to remove role.');
+      showToast(e?.message ?? 'Failed to remove role.');
     }
-    setTimeout(() => setToast(null), 3000);
   };
 
-  if (loading) return <div style={{ padding: 32, display: 'flex', gap: 12, alignItems: 'center', color: 'var(--text-secondary)' }}><Spinner /> Loading...</div>;
+  if (loading) return (
+    <div style={{ padding: 32, display: 'flex', gap: 12, alignItems: 'center', color: 'var(--text-secondary)' }}>
+      <Spinner /> Loading...
+    </div>
+  );
 
   return (
     <div style={{ padding: 32 }}>
@@ -500,7 +657,7 @@ function UsersTab() {
                         border: '1px solid var(--accent-border)', fontFamily: 'JetBrains Mono',
                       }}>
                         {r.name}
-                        {(!r.isSystemRole || permissions.includes('*:*')) && (
+                        {canManageRoles && !r.isSystemRole && (
                           <button onClick={() => removeRole(u._id, r._id)}
                             style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0, opacity: 0.6, fontSize: 14, lineHeight: 1 }}>
                             ×
@@ -510,15 +667,19 @@ function UsersTab() {
                     ))
                   }
                 </div>
-                <p style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Assign Role</p>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {roles.filter(r => !(userRoles[u._id] ?? []).find(ur => ur._id === r._id)).map(r => (
-                    <button key={r._id} onClick={() => assignRole(u._id, r._id)}
-                      className="btn btn-ghost btn-sm" style={{ fontFamily: 'JetBrains Mono', fontSize: 11 }}>
-                      + {r.name}
-                    </button>
-                  ))}
-                </div>
+                {canManageRoles && (
+                  <>
+                    <p style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Assign Role</p>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {roles.filter(r => !(userRoles[u._id] ?? []).find(ur => ur._id === r._id)).map(r => (
+                        <button key={r._id} onClick={() => assignRole(u._id, r._id)}
+                          className="btn btn-ghost btn-sm" style={{ fontFamily: 'JetBrains Mono', fontSize: 11 }}>
+                          + {r.name}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -592,11 +753,11 @@ function AuditLogCard({ log }: { log: AuditLog }) {
 }
 
 function AuditTab() {
-  const [recent, setRecent]       = useState<AuditLog[]>([]);
-  const [alerts, setAlerts]       = useState<AuditLog[]>([]);
-  const [section, setSection]     = useState<'alerts' | 'all'>('alerts');
-  const [loading, setLoading]     = useState(true);
-  const [error, setError]         = useState('');
+  const [recent, setRecent]   = useState<AuditLog[]>([]);
+  const [alerts, setAlerts]   = useState<AuditLog[]>([]);
+  const [section, setSection] = useState<'alerts' | 'all'>('alerts');
+  const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState('');
 
   const dedup = (logs: AuditLog[]) => {
     const seen = new Set<string>();
@@ -604,14 +765,8 @@ function AuditTab() {
   };
 
   useEffect(() => {
-    Promise.all([
-      auditApi.getSuspicious(),
-      auditApi.getRecent(),
-    ])
-      .then(([sus, rec]) => {
-        setAlerts(dedup(sus));
-        setRecent(dedup(rec));
-      })
+    Promise.all([auditApi.getSuspicious(), auditApi.getRecent()])
+      .then(([sus, rec]) => { setAlerts(dedup(sus)); setRecent(dedup(rec)); })
       .catch(err => {
         if (err instanceof ApiError && err.status === 403) {
           setError('You do not have permission to view audit logs.');
@@ -622,7 +777,11 @@ function AuditTab() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div style={{ padding: 32, display: 'flex', gap: 12, alignItems: 'center', color: 'var(--text-secondary)' }}><Spinner /> Loading audit logs...</div>;
+  if (loading) return (
+    <div style={{ padding: 32, display: 'flex', gap: 12, alignItems: 'center', color: 'var(--text-secondary)' }}>
+      <Spinner /> Loading audit logs...
+    </div>
+  );
 
   const displayed = section === 'alerts' ? alerts : recent;
 
@@ -631,14 +790,11 @@ function AuditTab() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
         <div>
           <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 4 }}>Audit Log</h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
-            Complete record of all permission checks and access decisions.
-          </p>
+          <p style={{ color: 'var(--text-secondary)', fontSize: 13 }}>Complete record of all permission checks and access decisions.</p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={() => setSection('alerts')}
-            className={section === 'alerts' ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm'}
-            style={{ position: 'relative' }}>
+            className={section === 'alerts' ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm'}>
             Security Alerts
             {alerts.length > 0 && (
               <span style={{ marginLeft: 6, background: '#ef4444', color: '#fff', borderRadius: 10, fontSize: 10, padding: '1px 6px', fontWeight: 700 }}>
@@ -662,12 +818,6 @@ function AuditTab() {
         </div>
       )}
 
-      {section === 'alerts' && (
-        <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
-          Events flagged by the anomaly detection engine — rapid denial patterns, off-hours sensitive operations, and privilege escalation indicators.
-        </p>
-      )}
-
       {displayed.length === 0 && !error ? (
         <div className="card" style={{ padding: 40, textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13 }}>
           {section === 'alerts' ? 'No security alerts. The system is clean.' : 'No activity recorded yet.'}
@@ -686,9 +836,8 @@ function AuditTab() {
 export default function DashboardPage() {
   const { user, loading, logout } = useAuth();
   const router = useRouter();
-  const [tab, setTab] = useState('my-requests');
+  const [tab, setTab] = useState('active-grants');
 
-  // Redirect to login if no session — loading guard prevents flash
   useEffect(() => {
     if (!loading && !user) router.replace('/login');
   }, [user, loading, router]);
@@ -697,14 +846,18 @@ export default function DashboardPage() {
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', position: 'relative', zIndex: 1 }}>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <style>{`
+        @keyframes spin  { to { transform: rotate(360deg); } }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+      `}</style>
       <Sidebar tab={tab} setTab={setTab} user={user} logout={logout} />
       <main style={{ flex: 1, overflowY: 'auto' }} className="fade-up">
-        {tab === 'my-requests' && <MyRequestsTab />}
-        {tab === 'new-request' && <NewRequestTab />}
-        {tab === 'queue'       && <ApprovalQueueTab currentUserId={user.userId} />}
-        {tab === 'users'       && <UsersTab />}
-        {tab === 'audit'       && <AuditTab />}
+        {tab === 'active-grants' && <ActiveGrantsTab />}
+        {tab === 'my-requests'  && <MyRequestsTab />}
+        {tab === 'new-request'  && <NewRequestTab />}
+        {tab === 'queue'        && <ApprovalQueueTab currentUserId={user.userId} />}
+        {tab === 'users'        && <UsersTab />}
+        {tab === 'audit'        && <AuditTab />}
       </main>
     </div>
   );

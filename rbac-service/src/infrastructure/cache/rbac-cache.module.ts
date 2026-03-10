@@ -1,11 +1,9 @@
-// src/infrastructure/cache/rbac-cache.module.ts
 import { Module } from '@nestjs/common';
 import { RbacCacheService } from './rbac-cache.service';
-
-
+import { GrantCacheService } from './grant-cache.service';
 
 @Module({
-  providers: [RbacCacheService],
-  exports: [RbacCacheService],   // <-- makes it available to any module that imports this
+  providers: [RbacCacheService, GrantCacheService],
+  exports: [RbacCacheService, GrantCacheService],
 })
 export class RbacCacheModule {}
