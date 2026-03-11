@@ -6,7 +6,9 @@ import { SuspiciousActivityService } from './suspicious-activity.service';
 
 // Worker that processes jobs asynchronously
 
-@Processor('audit')
+// to:
+@Processor('audit', { concurrency: 1, stalledInterval: 60000 })
+
 export class AuditProcessor extends WorkerHost {
 
   private logger = new Logger(AuditProcessor.name);

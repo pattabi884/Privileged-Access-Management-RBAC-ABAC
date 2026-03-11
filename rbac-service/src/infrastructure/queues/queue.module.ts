@@ -19,6 +19,14 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
               password: url.password,
               tls: redisUrl.startsWith('rediss://') ? {} : undefined,
             },
+            // Slow down polling — free Upstash tier burns through
+            // 500k requests fast with default aggressive polling.
+            // stalledInterval: how often BullMQ checks for stalled jobs (ms)
+            // maxStalledCount: retries before marking a job as failed
+            defaultJobOptions: {
+              removeOnComplete: 100,  // keep only last 100 completed jobs
+              removeOnFail: 100,
+            },
           };
         }
 
@@ -26,15 +34,14 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
       },
     }),
 
-    // Existing queue — audit processor consumes from this
-    BullModule.registerQueue({ name: 'audit' }),
-
-    // New queue — grant-expiry processor consumes from this.
-    // Jobs are pushed here by access-requests.service.ts approve()
-    // with a delay equal to the grant duration in milliseconds.
-    // BullMQ persists delayed jobs in Redis so a server restart
-    // doesn't lose pending expiry jobs.
-    BullModule.registerQueue({ name: 'grants' }),
+    BullModule.registerQueue({
+      name: 'audit',
+      defaultJobOptions: { removeOnComplete: 50, removeOnFail: 50 },
+    }),
+    BullModule.registerQueue({
+      name: 'grants',
+      defaultJobOptions: { removeOnComplete: 50, removeOnFail: 50 },
+    }),
   ],
   exports: [BullModule],
 })

@@ -18,7 +18,9 @@ export interface GrantExpiryJobData {
   requestId: string;
 }
 
-@Processor('grants')
+// to:
+@Processor('grants', { concurrency: 1, stalledInterval: 60000 })
+
 export class GrantExpiryProcessor extends WorkerHost {
   private readonly logger = new Logger(GrantExpiryProcessor.name);
 
